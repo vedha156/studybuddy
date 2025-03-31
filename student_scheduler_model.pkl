@@ -1,0 +1,71 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.preprocessing import StandardScaler
+
+
+
+# Generate synthetic dataset
+np.random.seed(42)
+data = {
+    'user_id': np.arange(1, 101),
+    'time_spent': np.random.randint(20, 120, 100),  # Minutes per topic
+    'quiz_score': np.random.randint(50, 100, 100),  # Score out of 100
+    'preferred_study_time': np.random.choice(['morning', 'afternoon', 'evening'], 100),
+    'difficulty_level': np.random.choice(['easy', 'medium', 'hard'], 100),
+    'past_performance': np.random.randint(40, 100, 100),  # Previous quiz scores
+    'study_frequency': np.random.randint(1, 7, 100),  # Study sessions per week
+}
+
+df = pd.DataFrame(data)
+
+# Convert categorical features to numerical
+study_time_map = {'morning': 0, 'afternoon': 1, 'evening': 2}
+difficulty_map = {'easy': 0, 'medium': 1, 'hard': 2}
+
+df['preferred_study_time'] = df['preferred_study_time'].map(study_time_map)
+df['difficulty_level'] = df['difficulty_level'].map(difficulty_map)
+
+# Generate target variable (weak areas: 1 if quiz score < 70 and difficulty is high, else 0)
+df['weak_area'] = ((df['quiz_score'] < 70) & (df['difficulty_level'] == 2)).astype(int)
+
+# Features and target
+X = df.drop(columns=['user_id', 'weak_area'])
+y = df['weak_area']
+
+# Feature Scaling
+scaler = StandardScaler()
+X[['time_spent', 'quiz_score', 'past_performance', 'study_frequency']] = scaler.fit_transform(
+    X[['time_spent', 'quiz_score', 'past_performance', 'study_frequency']]
+)
+
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Hyperparameter tuning using GridSearchCV
+param_grid = {
+    'n_estimators': [100, 200, 300],
+    'max_depth': [5, 10, 15],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 2, 4]
+}
+
+grid_search = GridSearchCV(RandomForestClassifier(random_state=42), param_grid, cv=5, n_jobs=-1, verbose=2)
+grid_search.fit(X_train, y_train)
+
+# Best model
+tuned_model = grid_search.best_estimator_
+
+# Predictions
+y_pred = tuned_model.predict(X_test)
+
+# Model evaluation
+accuracy = accuracy_score(y_test, y_pred)
+print(f'Best Parameters: {grid_search.best_params_}')
+print(f'Accuracy: {accuracy:.2f}')
+print(classification_report(y_test, y_pred))
+
+import joblib
+joblib.dump(tuned_model, 'student_scheduler_model.pkl')
